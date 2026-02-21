@@ -1,6 +1,8 @@
 import os
 import sqlite3
 import logging
+import threading
+from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder,
@@ -11,10 +13,20 @@ from telegram.ext import (
     filters
 )
 
-# ---------------- CONFIG (Hidden via Environment Variables) ----------------
-# Render-এর Environment Variables থেকে এই মানগুলো আসবে
+# ---------------- WEB SERVER FOR RENDER ----------------
+flask_app = Flask(__name__)
+
+@flask_app.route('/')
+def index():
+    return "Bot is alive!", 200
+
+def run_flask():
+    # Render automatically provides a PORT environment variable
+    port = int(os.environ.get("PORT", 10000))
+    flask_app.run(host='0.0.0.0', port=port)
+
+# ---------------- CONFIG ----------------
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-# ADMIN_ID স্ট্রিং হিসেবে আসে, তাই এটিকে integer-এ রূপান্তর করতে হবে
 ADMIN_ID = int(os.getenv("ADMIN_ID")) if os.getenv("ADMIN_ID") else None
 
 INSTAGRAM_URL = "https://www.instagram.com/prime_avay"
@@ -24,10 +36,9 @@ TELEGRAM_URL = "https://t.me/+80I0Jqq_9Hc3NGE9"
 APPROVED_LINK = "https://t.me/primeavay"
 REQUIRED_APPROVALS = 4
 
-# Logging setup
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# ---------------- DATABASE SETUP ----------------
+# ---------------- DATABASE ----------------
 def init_db():
     conn = sqlite3.connect('bot_data.db')
     cursor = conn.cursor()
@@ -59,7 +70,6 @@ def get_user(user_id):
 # ---------------- HANDLERS ----------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     status, _ = get_user(update.effective_user.id)
-    
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("📷 Follow Instagram", url=INSTAGRAM_URL)],
         [InlineKeyboardButton("🔔 Subscribe YouTube", url=YT_URL)],
@@ -67,87 +77,72 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("👥 Group Chat", url=TELEGRAM_URL)],
         [InlineKeyboardButton("📸 Submit Screenshot", callback_data="submit")]
     ])
-
-    text = "👋 Welcome to 𝑷𝑹𝑰𝑴𝑬 𝑨𝑽𝑨𝒀 一☪ Verification!\n\n👇 Complete all tasks above, then press Submit Screenshot..!!"
+    text = "👋 Welcome to 𝙋𝙍𝙄𝙈𝙀 𝘼𝙑𝘼𝙔 Verification!\n\n👇 Complete all tasks, then press Submit Screenshot..!! "
     if status == "verified":
-        text = f"✅ You are already verified!\nAccess Link: {APPROVED_LINK}"
-    
+        text = f"✅ Verified! Link: {APPROVED_LINK}"
     await update.message.reply_text(text, reply_markup=keyboard)
 
 async def submit_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user_id = query.from_user.id
     status, _ = get_user(user_id)
-
     if status == "verified":
         await query.answer("Already verified!", show_alert=True)
         return
-
     update_user(user_id, status="pending_submission", approvals=0)
-    await query.edit_message_text("📸 Now send a screenshot of your task completion (as a photo).")
+    await query.edit_message_text("📸 Please send a screenshot (as a photo).")
 
 async def receive_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     status, count = get_user(user.id)
-
     if status != "pending_submission":
-        await update.message.reply_text("❌ Please click 'Submit Screenshot' first.")
+        await update.message.reply_text("❌ Press 'Submit Screenshot' first.")
         return
-
-    if not ADMIN_ID:
-        await update.message.reply_text("⚠️ Admin is not configured. Contact support.")
-        return
-
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("✅ Approve", callback_data=f"appr_{user.id}"),
          InlineKeyboardButton("❌ Reject", callback_data=f"rejt_{user.id}")]
     ])
-
     await context.bot.send_photo(
         chat_id=ADMIN_ID,
         photo=update.message.photo[-1].file_id,
-        caption=f"📝 Verification Request\n👤 User: @{user.username}\n🆔 ID: {user.id}\n📈 Progress: {count}/{REQUIRED_APPROVALS}",
+        caption=f"📝 Request: @{user.username}\n🆔 ID: {user.id}\n📈 Progress: {count}/{REQUIRED_APPROVALS}",
         reply_markup=keyboard
     )
-    await update.message.reply_text("✅ Screenshot sent! Admin will review it.")
+    await update.message.reply_text("✅ Sent! Waiting for Admin.")
 
 async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     if query.from_user.id != ADMIN_ID: return
-    
     data = query.data.split("_")
     action, user_id = data[0], int(data[1])
     status, count = get_user(user_id)
-
     if action == "appr":
         new_count = count + 1
         if new_count >= REQUIRED_APPROVALS:
             update_user(user_id, status="verified", approvals=new_count)
-            await context.bot.send_message(user_id, f"🎉 Congratulations! You are verified.\n🔗 Link: {APPROVED_LINK}")
-            await query.edit_message_caption(f"✅ Full Approved ({new_count}/{REQUIRED_APPROVALS})")
+            await context.bot.send_message(user_id, f"🎉 Verified! Link: {APPROVED_LINK}")
+            await query.edit_message_caption(f"✅ Approved ({new_count}/{REQUIRED_APPROVALS})")
         else:
             update_user(user_id, status="pending_submission", approvals=new_count)
             await query.edit_message_caption(f"🟡 Approved ({new_count}/{REQUIRED_APPROVALS})")
-            await context.bot.send_message(user_id, f"✅ Step {new_count} approved! Send the next screenshot.")
-    
+            await context.bot.send_message(user_id, f"✅ Step {new_count} approved! Send next.")
     elif action == "rejt":
         update_user(user_id, status="start", approvals=0)
         await query.edit_message_caption("❌ Rejected")
-        await context.bot.send_message(user_id, "❌ Verification rejected. Please try again from the start.")
+        await context.bot.send_message(user_id, "❌ Rejected. Try again.")
 
 def main():
-    if not BOT_TOKEN:
-        print("Error: BOT_TOKEN not found in environment variables!")
-        return
-
     init_db()
+    # Start Flask in a separate thread
+    threading.Thread(target=run_flask, daemon=True).start()
+    
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(submit_handler, pattern="^submit$"))
     app.add_handler(MessageHandler(filters.PHOTO, receive_photo))
     app.add_handler(CallbackQueryHandler(admin_callback, pattern="^(appr|rejt)_"))
     
-    print("Prime Avay Verification Bot is running...")
+    print("Bot is running...")
     app.run_polling()
 
 if __name__ == "__main__":
