@@ -1,20 +1,42 @@
-# 🛡️ Prime Avay Verification Bot
+# 🤖 Prime Avay Verification Bot
 
-A professional and secure Telegram Verification Bot built with Python. This bot is designed for content creators to verify followers' tasks (such as Instagram follows, YouTube subscriptions, and joining groups) via manual screenshot approval.
+Welcome to the official repository of the **Prime Avay Verification Bot**. This project is a custom-built automation tool designed to streamline user verification and engagement for my community.
 
-## ✨ Features
+## 🚀 Key Features
+* **Social Media Integration**: Custom buttons for Instagram, YouTube, and WhatsApp channel follows.
+* **Automated Workflow**: Users submit screenshots as proof of tasks for admin review.
+* **Progress Tracking**: Systematically tracks up to 4 verification steps per user.
+* **Admin Dashboard**: Real-time Approve/Reject buttons sent directly to the Admin ID: `5832196298`.
+* **Render Optimized**: Built-in Flask health-check server to ensure 24/7 stability on Render's free tier.
 
-- **🔐 Secure Configuration**: sensitive data like `BOT_TOKEN` and `ADMIN_ID` are hidden using Environment Variables to ensure security.
-- **💾 Database Support**: uses SQLite3 to save user progress and verification states, so data isn't lost if the bot restarts.
-- **📊 Multi-Step Approval**: requires users to submit 4 screenshots to gain access to the final link (customizable).
-- **🛠 Admin Panel**: integrated Inline buttons for the Admin to `Approve` or `Reject` requests directly within Telegram.
-- **📂 State Management**: automatically tracks whether a user is in the submission process or already verified.
+## 🛠️ Tech Stack
+* **Language**: Python 3.10.14 (Optimized for stability).
+* **Framework**: `python-telegram-bot` (v20.8).
+* **Web Server**: Flask & Gunicorn.
+* **Database**: SQLite3.
+* **Hosting**: Render (Web Service).
 
-## 🚀 Setup & Installation
+## 📦 Deployment Instructions
 
-### 1. Prerequisites
-Ensure you have Python 3.10 or higher installed.
+1. **Clone the Repo**:
+   ```bash
+   git clone [https://github.com/prime-avay/Telegram_Bot.git](https://github.com/prime-avay/Telegram_Bot.git)
 
-### 2. Install Dependencies
-```bash
-pip install -r requirements.txt
+2. **Environment Variables**:
+   
+   Set these keys in your Render Dashboard:
+   BOT_TOKEN: Your API token from BotFather.
+   ADMIN_ID: Your Telegram ID .
+   PYTHON_VERSION: 3.10.14.
+
+3. **Runtime Configuration**:
+   The runtime.txt file is pre-configured to ensure the correct Python environment is used.
+   
+  🎮 About the Creator
+  I am Prime Avay, a Free Fire Content Creator and Coder. I specialize in building digital tools to empower my community    and automate workflows.
+  
+📺 YouTube: @prime_avay
+📷 Instagram: @prime_avay
+🌐 Brand: *PRIME AVAY*
+
+*Developed with passion by Prime Avay.*
