@@ -20,7 +20,7 @@ Welcome to the official repository of the **Prime Avay Verification Bot**. This 
 
 1. **Clone the Repo**:
    ```bash
-   git clone [https://github.com/prime-avay/Telegram_Bot.git](https://github.com/prime-avay/Telegram_Bot.git)
+   git clone [https://github.com/prime-avay/Telegram_Bot.git]
 
 2. **Environment Variables**:
    
