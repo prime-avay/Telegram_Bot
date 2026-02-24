@@ -80,7 +80,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ])
     
     welcome_text = (
-        f"👋 **Welcome to PRIME AVAY Verification!**\n\n"
+        f"👋 **Welcome to 𝙋𝙍𝙄𝙈𝙀 𝘼𝙑𝘼𝙔 Verification!**\n\n"
         f"Your Current Progress: {count}/{REQUIRED_APPROVALS}\n"
         f"Status: {progress}\n\n"
         f"👇 Complete all tasks above, then press **Submit Screenshot** to send proof for the next step."
