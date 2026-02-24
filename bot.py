@@ -6,10 +6,10 @@ from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
 
-# ---------------- WEB SERVER FOR RENDER ----------------
+# ---------------- WEB SERVER FOR UPTIME ----------------
 flask_app = Flask(__name__)
 @flask_app.route('/')
-def index(): return "Bot is alive!", 200
+def index(): return "Prime Avay Bot is Online!", 200
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
@@ -61,39 +61,61 @@ def update_user(user_id, status=None, approvals=None):
 
 # ---------------- HANDLERS ----------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    status, _ = get_user(update.effective_user.id)
+    user_id = update.effective_user.id
+    status, count = get_user(user_id)
+    
+    if status == "verified":
+        await update.message.reply_text(f"✅ You are already verified!\n🔗 Link: {APPROVED_LINK}")
+        return
+
+    # Progress bar calculation
+    progress = "✅" * count + "⏳" * (REQUIRED_APPROVALS - count)
+
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("📷 Follow Instagram", url=INSTAGRAM_URL)],
         [InlineKeyboardButton("🔔 Subscribe YouTube", url=YT_URL)],
-        [InlineKeyboardButton("💬 Join WhatsApp", url=WHATSAPP_URL)],
-        [InlineKeyboardButton("👥 Group Chat", url=TELEGRAM_URL)],
-        [InlineKeyboardButton("📸 Submit Screenshot", callback_data="submit")]
+        [InlineKeyboardButton("💬 Join WhatsApp Channel", url=WHATSAPP_URL)],
+        [InlineKeyboardButton("👥 Join Telegram Group", url=TELEGRAM_URL)],
+        [InlineKeyboardButton(f"📸 Submit Screenshot ({count}/{REQUIRED_APPROVALS})", callback_data="submit")]
     ])
-    text = "👋 Welcome to 𝙋𝙍𝙄𝙈𝙀 𝘼𝙑𝘼𝙔  Verification!\n\n👇 Complete all tasks, then press Submit Screenshot."
-    if status == "verified":
-        text = f"✅ Verified! Link: {APPROVED_LINK}"
-    await update.message.reply_text(text, reply_markup=keyboard)
+    
+    welcome_text = (
+        f"👋 **Welcome to PRIME AVAY Verification!**\n\n"
+        f"Your Current Progress: {count}/{REQUIRED_APPROVALS}\n"
+        f"Status: {progress}\n\n"
+        f"👇 Complete all tasks above, then press **Submit Screenshot** to send proof for the next step."
+    )
+    
+    await update.message.reply_text(welcome_text, reply_markup=keyboard, parse_mode="Markdown")
 
 async def submit_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    update_user(query.from_user.id, status="pending_submission", approvals=0)
-    await query.message.reply_text("📸 Please send a screenshot (as a photo).")
+    user_id = query.from_user.id
+    _, count = get_user(user_id)
+    
+    update_user(user_id, status="pending_submission")
+    await query.message.reply_text(f"📸 Please send the screenshot for **Step {count + 1}**:")
 
 async def receive_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     status, count = get_user(user.id)
-    if status != "pending_submission": return
+    
+    if status != "pending_submission":
+        return
     
     keyboard = InlineKeyboardMarkup([[
         InlineKeyboardButton("✅ Approve", callback_data=f"appr_{user.id}"),
         InlineKeyboardButton("❌ Reject", callback_data=f"rejt_{user.id}")
     ]])
     
-    await context.bot.send_photo(chat_id=ADMIN_ID, photo=update.message.photo[-1].file_id, 
-                                 caption=f"📝 Request: @{user.username}\nProgress: {count}/{REQUIRED_APPROVALS}", 
-                                 reply_markup=keyboard)
-    await update.message.reply_text("✅ Sent to Admin!")
+    await context.bot.send_photo(
+        chat_id=ADMIN_ID, 
+        photo=update.message.photo[-1].file_id, 
+        caption=f"📝 User: @{user.username}\n🆔 ID: {user.id}\n📍 Verifying Step: {count + 1}/{REQUIRED_APPROVALS}", 
+        reply_markup=keyboard
+    )
+    await update.message.reply_text(f"✅ Screenshot for Step {count + 1} has been sent to Admin. Please wait for approval.")
 
 async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -108,15 +130,17 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         new_count = count + 1
         if new_count >= REQUIRED_APPROVALS:
             update_user(user_id, status="verified", approvals=new_count)
-            await context.bot.send_message(user_id, f"🎉 Verified! Link: {APPROVED_LINK}")
-            await query.edit_message_caption(f"✅ Full Approved ({new_count}/{REQUIRED_APPROVALS})")
+            await context.bot.send_message(user_id, f"🎉 Congratulations! All {REQUIRED_APPROVALS} steps approved.\n🔗 Private Link: {APPROVED_LINK}")
+            await query.edit_message_caption(f"✅ FULLY VERIFIED (4/4)")
         else:
-            update_user(user_id, status="pending_submission", approvals=new_count)
-            await query.edit_message_caption(f"🟡 Approved ({new_count}/{REQUIRED_APPROVALS})")
-            await context.bot.send_message(user_id, f"✅ Step {new_count} approved! Send next.")
-    else:
-        update_user(user_id, status="start", approvals=0)
-        await query.edit_message_caption("❌ Rejected")
+            update_user(user_id, status="awaiting_next", approvals=new_count)
+            await query.edit_message_caption(f"🟢 Step {new_count} Approved. Total: {new_count}/{REQUIRED_APPROVALS}")
+            await context.bot.send_message(user_id, f"✅ Step {new_count} approved! {REQUIRED_APPROVALS - new_count} more to go. Click 'Submit' for the next step.")
+    
+    elif action == "rejt":
+        update_user(user_id, status="awaiting_next")
+        await query.edit_message_caption(f"🔴 Rejected Step {count + 1}. User notified.")
+        await context.bot.send_message(user_id, f"❌ Your screenshot for **Step {count + 1}** was rejected. Please resubmit the correct screenshot.")
 
 def main():
     init_db()
