@@ -17,8 +17,7 @@ def run_flask():
 
 # ---------------- CONFIG ----------------
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-# সরাসরি আপনার আইডি এখানে বসিয়ে দিলাম যাতে ভুল হওয়ার সুযোগ না থাকে
-ADMIN_ID = 5832196298 
+ADMIN_ID = 5832196298 # সরাসরি আপনার আইডি
 
 INSTAGRAM_URL = "https://www.instagram.com/prime_avay"
 YT_URL = "https://youtube.com/@prime_avay"
@@ -41,12 +40,15 @@ def init_db():
     conn.close()
 
 def get_user(user_id):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT status, approvals FROM users WHERE user_id = ?", (user_id,))
-    row = cursor.fetchone()
-    conn.close()
-    return row if row else ("start", 0)
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT status, approvals FROM users WHERE user_id = ?", (user_id,))
+        row = cursor.fetchone()
+        conn.close()
+        return row if row else ("start", 0)
+    except:
+        return ("start", 0)
 
 def update_user(user_id, status=None, approvals=None):
     conn = sqlite3.connect(DB_PATH)
@@ -83,7 +85,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"👋 **Welcome to 𝙋𝙍𝙄𝙈𝙀 𝘼𝙑𝘼𝙔 Verification!**\n\n"
         f"Your Progress: {count}/{REQUIRED_APPROVALS}\n"
         f"Status: {progress_bar}\n\n"
-        f"👇 Complete tasks, then press **Submit Screenshot** to send proof for step {count + 1}."
+        f"👇 Complete tasks, then press **Submit Screenshot**."
     )
     
     await update.message.reply_text(welcome_text, reply_markup=keyboard, parse_mode="Markdown")
@@ -92,18 +94,22 @@ async def submit_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     user_id = query.from_user.id
-    _, count = get_user(user_id)
+    status, count = get_user(user_id)
     
+    # স্ট্যাটাস আপডেট নিশ্চিত করা
     update_user(user_id, status="pending_submission")
-    await query.message.reply_text(f"📸 Please send the screenshot for **Step {count + 1}**:")
+    
+    await query.message.reply_text(f"📸 Please send the screenshot for **Step {count + 1}** now:")
 
 async def receive_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     status, count = get_user(user.id)
     
-    # ইউজার যদি আগে সাবমিট বাটনে ক্লিক না করে ছবি পাঠায় তবে সেটি গ্রহণ করবে না
+    # যদি ডাটাবেস থেকে স্ট্যাটাস মিস হয়, আমরা সরাসরি চেক করব
     if status != "pending_submission":
-        await update.message.reply_text("❌ Please click the **Submit Screenshot** button first.")
+        # ইউজারকে আবার সুযোগ দেওয়া
+        update_user(user.id, status="pending_submission")
+        await update.message.reply_text("⚠️ Verification mode was off. I've turned it on. **Please send the screenshot again.**")
         return
     
     keyboard = InlineKeyboardMarkup([[
@@ -112,18 +118,17 @@ async def receive_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]])
     
     try:
-        # অ্যাডমিনকে পাঠানো হচ্ছে
         await context.bot.send_photo(
             chat_id=ADMIN_ID, 
             photo=update.message.photo[-1].file_id, 
             caption=f"📝 User: @{user.username}\n🆔 ID: {user.id}\n📍 Verifying Step: {count + 1}/{REQUIRED_APPROVALS}", 
             reply_markup=keyboard
         )
-        await update.message.reply_text(f"✅ Step {count + 1} screenshot sent to Admin! Wait for review.")
+        # ছবি পাঠানোর পর স্ট্যাটাস 'awaiting_review' করে দেওয়া যাতে বারবার একই ছবি না পাঠাতে পারে
+        update_user(user.id, status="awaiting_review")
+        await update.message.reply_text(f"✅ Step {count + 1} screenshot sent to Admin! Please wait.")
     except Exception as e:
-        logging.error(f"Error: {e}")
-        # অ্যাডমিন বট স্টার্ট না করলে এই এরর দেখাবে
-        await update.message.reply_text("❌ Admin has not started the bot. Tell @prime_avay to send /start to the bot.")
+        await update.message.reply_text("❌ Admin not found. Please make sure @prime_avay has started the bot.")
 
 async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -138,17 +143,17 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         new_count = count + 1
         if new_count >= REQUIRED_APPROVALS:
             update_user(user_id, status="verified", approvals=new_count)
-            await context.bot.send_message(user_id, f"🎉 Congratulations! All steps approved.\n🔗 Private Link: {APPROVED_LINK}")
-            await query.edit_message_caption(f"✅ FULLY VERIFIED (4/4)")
+            await context.bot.send_message(user_id, f"🎉 Verified!\n🔗 Link: {APPROVED_LINK}")
+            await query.edit_message_caption(f"✅ VERIFIED (4/4)")
         else:
-            update_user(user_id, status="awaiting_next", approvals=new_count)
-            await query.edit_message_caption(f"🟢 Step {new_count} Approved. Total: {new_count}/{REQUIRED_APPROVALS}")
-            await context.bot.send_message(user_id, f"✅ Step {new_count} approved! {REQUIRED_APPROVALS - new_count} more to go. Click 'Submit' for the next step.")
+            update_user(user_id, status="start", approvals=new_count)
+            await context.bot.send_message(user_id, f"✅ Step {new_count} approved! Press 'Submit' for the next one.")
+            await query.edit_message_caption(f"🟢 Approved {new_count}/4")
     
     elif action == "rejt":
-        update_user(user_id, status="awaiting_next")
-        await query.edit_message_caption(f"🔴 Rejected Step {count + 1}. User notified.")
-        await context.bot.send_message(user_id, f"❌ Your screenshot for **Step {count + 1}** was rejected. Please resubmit the correct screenshot.")
+        update_user(user_id, status="start")
+        await context.bot.send_message(user_id, f"❌ Step {count + 1} was rejected. Send again.")
+        await query.edit_message_caption(f"🔴 Rejected Step {count + 1}")
 
 def main():
     init_db()
