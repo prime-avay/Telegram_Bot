@@ -7,7 +7,6 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
 
 # ---------------- WEB SERVER FOR UPTIME ----------------
-# এটি UptimeRobot বা Cron-job-এর সাথে বটকে ২৪/৭ সচল রাখতে সাহায্য করবে
 flask_app = Flask(__name__)
 @flask_app.route('/')
 def index(): return "Prime Avay Bot is Online!", 200
@@ -18,10 +17,11 @@ def run_flask():
 
 # ---------------- CONFIG ----------------
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID", 0)) # আপনার আইডি: 5832196298
+# সরাসরি আপনার আইডি এখানে বসিয়ে দিলাম যাতে ভুল হওয়ার সুযোগ না থাকে
+ADMIN_ID = 5832196298 
 
 INSTAGRAM_URL = "https://www.instagram.com/prime_avay"
-YT_URL = "https://www.youtube.com/@prime_avay"
+YT_URL = "https://youtube.com/@prime_avay"
 WHATSAPP_URL = "https://whatsapp.com/channel/0029Vb6m4r60QeakFUmaSO3p"
 TELEGRAM_URL = "https://t.me/+80I0Jqq_9Hc3NGE9"
 APPROVED_LINK = "https://t.me/primeavay"
@@ -69,7 +69,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"✅ You are already verified!\n🔗 Link: {APPROVED_LINK}")
         return
 
-    # প্রোগ্রেস বার (✅ এবং ⏳ দিয়ে তৈরি)
     progress_bar = "✅" * count + "⏳" * (REQUIRED_APPROVALS - count)
 
     keyboard = InlineKeyboardMarkup([
@@ -81,10 +80,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ])
     
     welcome_text = (
-        f"👋 **Welcome to 𝙋𝙍𝙄𝙈𝙀 𝘼𝙑𝘼𝙔  Verification!**\n\n"
+        f"👋 **Welcome to 𝙋𝙍𝙄𝙈𝙀 𝘼𝙑𝘼𝙔 Verification!**\n\n"
         f"Your Progress: {count}/{REQUIRED_APPROVALS}\n"
         f"Status: {progress_bar}\n\n"
-        f"👇 Complete all tasks above, then press **Submit Screenshot** to send proof for step {count + 1}."
+        f"👇 Complete tasks, then press **Submit Screenshot** to send proof for step {count + 1}."
     )
     
     await update.message.reply_text(welcome_text, reply_markup=keyboard, parse_mode="Markdown")
@@ -96,13 +95,15 @@ async def submit_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     _, count = get_user(user_id)
     
     update_user(user_id, status="pending_submission")
-    await query.message.reply_text(f"📸 Please send the screenshot for Step {count + 1}:")
+    await query.message.reply_text(f"📸 Please send the screenshot for **Step {count + 1}**:")
 
 async def receive_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     status, count = get_user(user.id)
     
+    # ইউজার যদি আগে সাবমিট বাটনে ক্লিক না করে ছবি পাঠায় তবে সেটি গ্রহণ করবে না
     if status != "pending_submission":
+        await update.message.reply_text("❌ Please click the **Submit Screenshot** button first.")
         return
     
     keyboard = InlineKeyboardMarkup([[
@@ -111,16 +112,18 @@ async def receive_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]])
     
     try:
+        # অ্যাডমিনকে পাঠানো হচ্ছে
         await context.bot.send_photo(
             chat_id=ADMIN_ID, 
             photo=update.message.photo[-1].file_id, 
             caption=f"📝 User: @{user.username}\n🆔 ID: {user.id}\n📍 Verifying Step: {count + 1}/{REQUIRED_APPROVALS}", 
             reply_markup=keyboard
         )
-        await update.message.reply_text(f"✅ Screenshot for Step {count + 1} sent to Admin! Waiting for review.")
+        await update.message.reply_text(f"✅ Step {count + 1} screenshot sent to Admin! Wait for review.")
     except Exception as e:
         logging.error(f"Error: {e}")
-        await update.message.reply_text("❌ Failed to send to admin. Ensure you have started the bot as admin.")
+        # অ্যাডমিন বট স্টার্ট না করলে এই এরর দেখাবে
+        await update.message.reply_text("❌ Admin has not started the bot. Tell @prime_avay to send /start to the bot.")
 
 async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
