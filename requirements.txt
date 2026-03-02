@@ -1,1 +1,3 @@
-python-telegram-bot==21.10
+python-telegram-bot==20.x
+flask==3.0.x
+gunicorn
