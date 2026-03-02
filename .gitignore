@@ -1,17 +1,20 @@
-# Python environment
+# Python temporary files
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Environment variables (Sensitive data)
+.env
+
+# Database files 
+# (We exclude this so your local testing data doesn't overwrite the server data)
+*.db
+*.sqlite3
+
+# Virtual environment
 venv/
 env/
 .venv/
 
-# Environment variables (Crucial for security)
-.env
-
-# OS generated files
+# Render/OS specific
 .DS_Store
-Thumbs.db
-
-# Logs
-*.log
