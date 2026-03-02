@@ -128,5 +128,6 @@ def main():
     app.add_handler(CallbackQueryHandler(admin_action, pattern="^(app|rej)_"))
     app.run_polling()
 
-if name == "main":
+if __name__ == "__main__":
+
     main()
