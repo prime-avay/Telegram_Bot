@@ -6,10 +6,10 @@ from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
 
-# ---------------- WEB SERVER FOR UPTIME ----------------
+# ---------------- WEB SERVER FOR RENDER ----------------
 flask_app = Flask(__name__)
 @flask_app.route('/')
-def index(): return "Prime Avay Bot is Online!", 200
+def index(): return "Bot is alive!", 200
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
@@ -17,13 +17,14 @@ def run_flask():
 
 # ---------------- CONFIG ----------------
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = 5832196298  # Your Fixed Admin ID
+ADMIN_ID = int(os.getenv("ADMIN_ID", 0))
 
 INSTAGRAM_URL = "https://www.instagram.com/prime_avay"
 YT_URL = "https://www.youtube.com/@prime_avay"
 WHATSAPP_URL = "https://whatsapp.com/channel/0029Vb6m4r60QeakFUmaSO3p"
 TELEGRAM_URL = "https://t.me/+80I0Jqq_9Hc3NGE9"
 APPROVED_LINK = "https://t.me/primeavay"
+REQUIRED_APPROVALS = 4
 
 logging.basicConfig(level=logging.INFO)
 
@@ -34,72 +35,65 @@ DB_PATH = os.path.join(BASE_DIR, 'bot_data.db')
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute('CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, approvals INTEGER DEFAULT 0)')
+    cursor.execute('CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, status TEXT, approvals INTEGER DEFAULT 0)')
     conn.commit()
     conn.close()
 
-def get_approvals(user_id):
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("SELECT approvals FROM users WHERE user_id = ?", (user_id,))
-        row = cursor.fetchone()
-        conn.close()
-        return row[0] if row else 0
-    except: return 0
-
-def add_approval(user_id):
-    count = get_approvals(user_id) + 1
+def get_user(user_id):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("INSERT OR REPLACE INTO users (user_id, approvals) VALUES (?, ?)", (user_id, count))
+    cursor.execute("SELECT status, approvals FROM users WHERE user_id = ?", (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return row if row else ("start", 0)
+
+def update_user(user_id, status=None, approvals=None):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    if status is not None and approvals is not None:
+        cursor.execute("INSERT OR REPLACE INTO users (user_id, status, approvals) VALUES (?, ?, ?)", (user_id, status, approvals))
+    elif status is not None:
+        cursor.execute("UPDATE users SET status = ? WHERE user_id = ?", (status, user_id))
+    elif approvals is not None:
+        cursor.execute("UPDATE users SET approvals = ? WHERE user_id = ?", (approvals, user_id))
     conn.commit()
     conn.close()
-    return count
 
 # ---------------- HANDLERS ----------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    count = get_approvals(user_id)
-    
+    status, _ = get_user(update.effective_user.id)
     keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📷 Instagram", url=INSTAGRAM_URL), InlineKeyboardButton("🔔 YouTube", url=YT_URL)],
-        [InlineKeyboardButton("💬 WhatsApp", url=WHATSAPP_URL), InlineKeyboardButton("👥 Group Chat", url=TELEGRAM_URL)],
-        [InlineKeyboardButton(f"🚀 Submit Photo ({count}/4)", callback_data="instruction")]
+        [InlineKeyboardButton("📷 Follow Instagram", url=INSTAGRAM_URL)],
+        [InlineKeyboardButton("🔔 Subscribe YouTube", url=YT_URL)],
+        [InlineKeyboardButton("💬 Join WhatsApp", url=WHATSAPP_URL)],
+        [InlineKeyboardButton("👥 Group Chat", url=TELEGRAM_URL)],
+        [InlineKeyboardButton("📸 Submit Screenshot", callback_data="submit")]
     ])
-    
-    await update.message.reply_text(
-        f"👋 **Prime Avay Verification**\n\nProgress: {count}/4\n\nComplete the tasks above and send your screenshots directly to me.",
-        reply_markup=keyboard, parse_mode="Markdown"
-    )
+    text = "👋 Welcome to Prime Avay Verification!\n\n👇 Complete all tasks, then press Submit Screenshot."
+    if status == "verified":
+        text = f"✅ Verified! Link: {APPROVED_LINK}"
+    await update.message.reply_text(text, reply_markup=keyboard)
 
-async def instruction_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.callback_query.answer()
-    await update.callback_query.message.reply_text("📸 Please send your screenshot now. I will forward it to the Admin.")
+async def submit_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    update_user(query.from_user.id, status="pending_submission", approvals=0)
+    await query.message.reply_text("📸 Please send a screenshot (as a photo).")
 
 async def receive_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    count = get_approvals(user.id)
+    status, count = get_user(user.id)
+    if status != "pending_submission": return
     
-    if count >= 4:
-        await update.message.reply_text(f"✅ You are already verified!\nLink: {APPROVED_LINK}")
-        return
-
-    admin_keyboard = InlineKeyboardMarkup([[
+    keyboard = InlineKeyboardMarkup([[
         InlineKeyboardButton("✅ Approve", callback_data=f"appr_{user.id}"),
         InlineKeyboardButton("❌ Reject", callback_data=f"rejt_{user.id}")
     ]])
     
-    try:
-        await context.bot.send_photo(
-            chat_id=ADMIN_ID, 
-            photo=update.message.photo[-1].file_id, 
-            caption=f"📝 User: @{user.username}\n🆔 ID: {user.id}\n📍 Verifying Step: {count + 1}/4", 
-            reply_markup=admin_keyboard
-        )
-        await update.message.reply_text(f"✅ Screenshot for Step {count + 1} sent to Admin! Please wait for approval.")
-    except Exception as e:
-        await update.message.reply_text("❌ Failed to contact Admin. Please ensure @prime_avay has started the bot.")
+    await context.bot.send_photo(chat_id=ADMIN_ID, photo=update.message.photo[-1].file_id, 
+                                 caption=f"📝 Request: @{user.username}\nProgress: {count}/{REQUIRED_APPROVALS}", 
+                                 reply_markup=keyboard)
+    await update.message.reply_text("✅ Sent to Admin!")
 
 async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -108,27 +102,28 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     action, user_id = query.data.split("_")
     user_id = int(user_id)
+    _, count = get_user(user_id)
 
     if action == "appr":
-        new_count = add_approval(user_id)
-        if new_count >= 4:
-            await context.bot.send_message(user_id, f"🎉 Congratulations! All steps approved.\nLink: {APPROVED_LINK}")
-            await query.edit_message_caption("✅ VERIFIED (4/4)")
+        new_count = count + 1
+        if new_count >= REQUIRED_APPROVALS:
+            update_user(user_id, status="verified", approvals=new_count)
+            await context.bot.send_message(user_id, f"🎉 Verified! Link: {APPROVED_LINK}")
+            await query.edit_message_caption(f"✅ Full Approved ({new_count}/{REQUIRED_APPROVALS})")
         else:
-            await context.bot.send_message(user_id, f"✅ Step {new_count} approved! Send the next screenshot.")
-            await query.edit_message_caption(f"🟢 Approved {new_count}/4")
-    
-    elif action == "rejt":
-        count = get_approvals(user_id)
-        await context.bot.send_message(user_id, f"❌ Your screenshot for Step {count + 1} was rejected. Please send a valid one.")
-        await query.edit_message_caption(f"🔴 Rejected (Step {count+1})")
+            update_user(user_id, status="pending_submission", approvals=new_count)
+            await query.edit_message_caption(f"🟡 Approved ({new_count}/{REQUIRED_APPROVALS})")
+            await context.bot.send_message(user_id, f"✅ Step {new_count} approved! Send next.")
+    else:
+        update_user(user_id, status="start", approvals=0)
+        await query.edit_message_caption("❌ Rejected")
 
 def main():
     init_db()
     threading.Thread(target=run_flask, daemon=True).start()
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(instruction_callback, pattern="^instruction$"))
+    app.add_handler(CallbackQueryHandler(submit_handler, pattern="^submit$"))
     app.add_handler(MessageHandler(filters.PHOTO, receive_photo))
     app.add_handler(CallbackQueryHandler(admin_callback, pattern="^(appr|rejt)_"))
     app.run_polling()
