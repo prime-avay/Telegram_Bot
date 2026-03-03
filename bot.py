@@ -84,16 +84,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ])
     
     await update.message.reply_text(
-        f"👋 **Prime Avay Verification**\n\n"
+        f"👋 ** Welcome to 𝑷𝑹𝑰𝑴𝑬 𝑨𝑽𝑨𝒀 Verification**\n\n"
         f"Progress: {count}/4\n"
         f"Status: {progress_bar}\n\n"
-        f"Complete the tasks and send your screenshots directly to me.",
+        f"Complete the tasks and send your step wise screenshots directly to me..!!",
         reply_markup=keyboard, parse_mode="Markdown"
     )
 
 async def instruction_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer()
-    await update.callback_query.message.reply_text("📸 Please send your screenshot now. I will forward it to the Admin.")
+    await update.callback_query.message.reply_text("📸 Please send your screenshot now. I will forward it to the Admin.\n\n Remainder ❗❗ : Kindly Send one at a time, don't send the next one until the previous one is verified..!!")
 
 async def receive_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -132,7 +132,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if action == "appr":
         new_count = add_approval(user_id)
         if new_count >= 4:
-            await context.bot.send_message(user_id, f"🎉 Congratulations! All steps approved.\nLink: {APPROVED_LINK}")
+            await context.bot.send_message(user_id, f"🎉 Congratulations !! All steps approved.\n\nLink: {APPROVED_LINK}")
             await query.edit_message_caption("✅ VERIFIED (4/4)")
         else:
             await context.bot.send_message(user_id, f"✅ Step {new_count} approved! Send the next screenshot.")
@@ -141,7 +141,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif action == "rejt":
         # Show specific step number in rejection
         rejected_step = count + 1
-        await context.bot.send_message(user_id, f"❌ Your screenshot for **Step {rejected_step}** was rejected. Please resubmit a valid screenshot.")
+        await context.bot.send_message(user_id, f"❌ Your screenshot for Step {rejected_step} was rejected. Please resubmit a valid screenshot.")
         await query.edit_message_caption(f"🔴 Rejected (Step {rejected_step})")
 
 # ---------------- MAIN EXECUTION ----------------
@@ -160,3 +160,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
