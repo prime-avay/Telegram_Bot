@@ -2,7 +2,6 @@ import os
 import sqlite3
 import logging
 import threading
-import asyncio
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
@@ -64,11 +63,13 @@ def add_approval(user_id):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     count = get_approvals(user_id)
+    
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("📷 Instagram", url=INSTAGRAM_URL), InlineKeyboardButton("🔔 YouTube", url=YT_URL)],
         [InlineKeyboardButton("💬 WhatsApp", url=WHATSAPP_URL), InlineKeyboardButton("👥 Group Chat", url=TELEGRAM_URL)],
         [InlineKeyboardButton(f"🚀 Submit Photo ({count}/4)", callback_data="instruction")]
     ])
+    
     await update.message.reply_text(
         f"👋 **Prime Avay Verification**\n\nProgress: {count}/4\n\nComplete the tasks above and send your screenshots directly to me.",
         reply_markup=keyboard, parse_mode="Markdown"
@@ -81,27 +82,35 @@ async def instruction_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 async def receive_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     count = get_approvals(user.id)
+    
     if count >= 4:
         await update.message.reply_text(f"✅ Already verified!\nLink: {APPROVED_LINK}")
         return
+
     admin_keyboard = InlineKeyboardMarkup([[
         InlineKeyboardButton("✅ Approve", callback_data=f"appr_{user.id}"),
         InlineKeyboardButton("❌ Reject", callback_data=f"rejt_{user.id}")
     ]])
+    
     try:
-        await context.bot.send_photo(chat_id=ADMIN_ID, photo=update.message.photo[-1].file_id, 
-                                   caption=f"📝 User: @{user.username}\n📍 Step: {count + 1}/4", 
-                                   reply_markup=admin_keyboard)
+        await context.bot.send_photo(
+            chat_id=ADMIN_ID, 
+            photo=update.message.photo[-1].file_id, 
+            caption=f"📝 User: @{user.username}\n📍 Step: {count + 1}/4", 
+            reply_markup=admin_keyboard
+        )
         await update.message.reply_text(f"✅ Step {count + 1} sent to Admin! Please wait.")
     except Exception as e:
-        await update.message.reply_text("❌ Failed to contact Admin.")
+        await update.message.reply_text("❌ Failed to contact Admin. Please contact @prime_avay.")
 
 async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     if query.from_user.id != ADMIN_ID: return
+    
     action, user_id = query.data.split("_")
     user_id = int(user_id)
+
     if action == "appr":
         new_count = add_approval(user_id)
         if new_count >= 4:
@@ -110,9 +119,10 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await context.bot.send_message(user_id, f"✅ Step {new_count} approved! Send the next one.")
             await query.edit_message_caption(f"🟢 Approved {new_count}/4")
+    
     elif action == "rejt":
         count = get_approvals(user_id)
-        await context.bot.send_message(user_id, f"❌ Step {count + 1} rejected. Resubmit.")
+        await context.bot.send_message(user_id, f"❌ Step {count + 1} rejected. Please resubmit.")
         await query.edit_message_caption(f"🔴 Rejected (Step {count+1})")
 
 def main():
@@ -128,4 +138,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
