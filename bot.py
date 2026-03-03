@@ -2,32 +2,42 @@ import os
 import sqlite3
 import logging
 import threading
+import asyncio
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
 
 # ---------------- WEB SERVER FOR UPTIME ----------------
 flask_app = Flask(__name__)
+
 @flask_app.route('/')
-def index(): return "Prime Avay Bot is Online!", 200
+def index():
+    return "Prime Avay Bot is Online!", 200
 
 def run_flask():
+    # Render provides a PORT environment variable
     port = int(os.environ.get("PORT", 10000))
     flask_app.run(host='0.0.0.0', port=port)
 
-# ---------------- CONFIG ----------------
+# ---------------- CONFIGURATION ----------------
+# Ensure these are set in your Render Environment Variables
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = 5832196298  # Your Fixed Admin ID
+# Fixed Admin ID for Prime Avay
+ADMIN_ID = 5832196298 
 
+# Social Media Links
 INSTAGRAM_URL = "https://www.instagram.com/prime_avay"
 YT_URL = "https://www.youtube.com/@prime_avay"
 WHATSAPP_URL = "https://whatsapp.com/channel/0029Vb6m4r60QeakFUmaSO3p"
 TELEGRAM_URL = "https://t.me/+80I0Jqq_9Hc3NGE9"
 APPROVED_LINK = "https://t.me/primeavay"
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
 
-# ---------------- DATABASE ----------------
+# ---------------- DATABASE LOGIC ----------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, 'bot_data.db')
 
@@ -46,7 +56,9 @@ def get_approvals(user_id):
         row = cursor.fetchone()
         conn.close()
         return row[0] if row else 0
-    except: return 0
+    except Exception as e:
+        logging.error(f"Database error: {e}")
+        return 0
 
 def add_approval(user_id):
     count = get_approvals(user_id) + 1
@@ -57,7 +69,7 @@ def add_approval(user_id):
     conn.close()
     return count
 
-# ---------------- HANDLERS ----------------
+# ---------------- BOT HANDLERS ----------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     count = get_approvals(user_id)
@@ -99,7 +111,8 @@ async def receive_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         await update.message.reply_text(f"✅ Screenshot for Step {count + 1} sent to Admin! Please wait.")
     except Exception as e:
-        await update.message.reply_text("❌ Failed to contact Admin. Please ensure @prime_avay has started the bot.")
+        logging.error(f"Failed to send to admin: {e}")
+        await update.message.reply_text("❌ Failed to contact Admin. Ensure @prime_avay has started the bot.")
 
 async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -123,15 +136,25 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(user_id, f"❌ Your screenshot for Step {count + 1} was rejected. Please resubmit.")
         await query.edit_message_caption(f"🔴 Rejected (Step {count+1})")
 
+# ---------------- MAIN EXECUTION ----------------
 def main():
     init_db()
+    
+    # Run Flask in background thread
     threading.Thread(target=run_flask, daemon=True).start()
+    
+    # Initialize Bot Application
     app = ApplicationBuilder().token(BOT_TOKEN).build()
+    
+    # Add Handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(instruction_callback, pattern="^instruction$"))
     app.add_handler(MessageHandler(filters.PHOTO, receive_photo))
     app.add_handler(CallbackQueryHandler(admin_callback, pattern="^(appr|rejt)_"))
-    app.run_polling()
+    
+    print("Prime Avay Bot is starting...")
+    # Using close_loop=False helps prevent loop errors on some hosting providers
+    app.run_polling(close_loop=False)
 
 if __name__ == "__main__":
     main()
